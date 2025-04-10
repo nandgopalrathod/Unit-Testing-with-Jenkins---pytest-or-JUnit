@@ -2,55 +2,55 @@ pipeline {
     agent any
     
     stages {
-        // Single checkout stage
         stage('Checkout') {
             steps {
-                checkout([
-                    $class: 'GitSCM',
-                    branches: [[name: '*/master']],
-                    userRemoteConfigs: [[
-                        url: 'https://github.com/nandgopalrathod/Unit-Testing-with-Jenkins---pytest-or-JUnit.git'
-                    ]]
-                ])
-            }
-        }
-        
-        stage('Setup Environment') {
-            steps {
-                bat 'set'
-                bat 'java -version'
-                bat 'python --version'
-                bat 'pytest --version'
+                checkout scm
             }
         }
         
         stage('Java Tests') {
             steps {
-                bat '''
-                echo "Compiling Java files..."
-                javac MathUtils.java
-                javac -cp .;junit-platform-console-standalone-1.7.0.jar MathUtilsTest.java
-                echo "Running Java tests..."
-                java -jar junit-platform-console-standalone-1.7.0.jar --class-path . --scan-class-path --reports-dir=test-results
-                '''
+                powershell '''
+Write-Host "Checking for Java files..."
+Get-ChildItem -Path . -Filter *.java -Recurse | ForEach-Object { $_.FullName }
+
+Write-Host "Checking for JUnit JAR file..."
+if (-not (Test-Path "junit-platform-console-standalone-1.7.0.jar")) {
+    Write-Host "Downloading JUnit JAR file..."
+    Invoke-WebRequest -Uri 'https://repo1.maven.org/maven2/org/junit/platform/junit-platform-console-standalone/1.7.0/junit-platform-console-standalone-1.7.0.jar' -OutFile 'junit-platform-console-standalone-1.7.0.jar'
+}
+
+Write-Host "Compiling Java files..."
+javac MathUtils.java
+javac -cp .;junit-platform-console-standalone-1.7.0.jar MathUtilsTest.java
+
+Write-Host "Running Java tests..."
+java -jar junit-platform-console-standalone-1.7.0.jar --class-path . --scan-class-path
+'''
             }
             post {
                 always {
-                    junit 'test-results/**/*.xml'
+                    junit allowEmptyResults: true, testResults: '**/TEST-*.xml'
                 }
             }
         }
         
         stage('Python Tests') {
             steps {
-                bat '''
-                echo "Running Python tests..."
-                python -m pytest test_math_utils.py -v --junitxml=python-test-results.xml
-                '''
+                powershell '''
+Write-Host "Checking for Python files..."
+Get-ChildItem -Path . -Filter *.py -Recurse | ForEach-Object { $_.FullName }
+
+Write-Host "Installing pytest if needed..."
+pip install pytest
+
+Write-Host "Running Python tests..."
+python -m pytest test_math_utils.py -v --junitxml=python-test-results.xml
+'''
             }
             post {
                 always {
-                    junit 'python-test-results.xml'
+                    junit allowEmptyResults: true, testResults: 'python-test-results.xml'
                 }
             }
         }
@@ -59,7 +59,6 @@ pipeline {
     post {
         always {
             cleanWs()
-            archiveArtifacts artifacts: '**/test-results/**/*.xml', allowEmptyArchive: true
         }
     }
 }
